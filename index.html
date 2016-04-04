@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Awsome Kinesis</title>
+
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.0.11.min.js"></script>
+    <script src="http://bernii.github.io/gauge.js/dist/gauge.min.js"></script>
+    <script src="http://canvasjs.com/assets/script/canvasjs.min.js"></script>
+
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap-theme.min.css">
+    <style>
+        body {
+          overflow-y:scroll;
+        }
+
+        .barChart {
+          height: 350px;
+          border: 1px;
+        }
+        .header {
+            border-bottom: 1px solid #ccc;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="main"></div>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-xs-9">
+    		  <h1>Onur's MAC's Metrics Streamed by Kinesis</h1>
+            </div>
+            <div class="col-xs-9">
+                <h1><label>CPU:</label><label id="cpu"></label></h1>
+            </div>
+            <div class="col-xs-9">
+                <h1><label>Memory:</label><label id="mem"></label></h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-xs-9">
+                <div id="chartContainer" style="height: 200px; width:100%;"></div>
+            </div>
+            <div class="col-xs-9">
+                <div id="chartContainer1" style="height: 200px; width:100%;"></div>
+            </div>
+        </div>
+    </div>
+
+
+    
+
+    <script type="text/javascript">
+
+    var dps_cpu = []; // dataPoints
+    var dps_mem = []; // dataPoints
+    var chart_cpu = new CanvasJS.Chart("chartContainer",
+    {
+        title :{
+            text: "CPU"
+        },
+        data: [
+        {
+            type: "line",
+            dataPoints: dps_cpu
+        }
+
+        ]
+    });
+    var chart_mem = new CanvasJS.Chart("chartContainer1",
+    {
+        title :{
+            text: "FREE MEMORY"
+        },
+        data: [
+        {
+            type: "line",
+            dataPoints: dps_mem
+        }
+        ]
+    });
+
+    var xVal = 0;
+    var yVal = 0;
+    cpu=0;
+    mem=0; 
+    var dataLength = 40;
+    var updateChart = function (count,cpu,mem) {
+            count = count || 1;
+            var cpu = parseInt(cpu);
+            var mem = parseInt(mem);
+            dps_cpu.push({
+                x: xVal,
+                y: cpu
+            });
+            dps_mem.push({
+                x: xVal,
+                y: mem
+            });
+            xVal++;
+            
+            if (dps_cpu.length > dataLength)
+            {
+                dps_cpu.shift();                
+            }
+            if (dps_mem.length > dataLength)
+            {
+                dps_mem.shift();                
+            }
+            
+            
+            chart_cpu.render();     
+            chart_mem.render();     
+
+
+    };
+    updateChart(dataLength,cpu,mem);
+
+    AWS.config.update({accessKeyId: '', secretAccessKey: ''});
+    AWS.config.region = 'eu-west-1';
+    var streamName = 'Awsome-kinesis';
+    getStream();
+    
+    function getStream() {
+    	kinesis = new AWS.Kinesis();
+
+    	kinesis.describeStream({StreamName: streamName}, function (err, data) {
+            var params = {
+			  ShardId: data.StreamDescription.Shards[0].ShardId, /* required */
+			  ShardIteratorType: 'LATEST', /* required */
+			  StreamName: streamName /* required */
+			};
+			kinesis.getShardIterator(params, function(err, data) {
+			  if 
+                 (err) console.log(err, err.stack); // an error occurred
+			  else     
+			     getRecords(null,data);          
+			});
+        });
+	};
+
+    function getRecords(err, data) {
+        
+    	
+        if (err) {
+            console.log(err);
+            return;
+        }
+        var params = {
+		  ShardIterator: data.ShardIterator, /* required */
+		  Limit: 100
+		};
+	
+        kinesis.getRecords(params, function (err, data) {
+            if (err) {
+                console.log(err);
+                return;
+            }
+             if (data['Records'].length > 0) {
+                
+		        
+
+                for (var i in data['Records']) {
+		        	if (data['Records'][i]['PartitionKey'] == 'cpu'){
+			        	u8=data['Records'][i]['Data'];
+			        	var b64encoded = btoa(String.fromCharCode.apply(null, u8));
+			        	cpu = window.atob(b64encoded);
+			        	document.getElementById('cpu').innerHTML = cpu;
+
+          		};
+		      		if (data['Records'][i]['PartitionKey'] == 'mem'){
+			        	u8=data['Records'][i]['Data'];
+			        	var b64encoded = btoa(String.fromCharCode.apply(null, u8));
+			        	mem = window.atob(b64encoded);
+			        	document.getElementById('mem').innerHTML = mem;
+
+		      		};
+                    updateChart(dataLength,cpu,mem) ;
+
+		        }
+		    }; 
+
+            
+           setTimeout(function() {
+                data.ShardIterator = data.NextShardIterator;
+                getRecords(null, data);
+            }, 200);
+        });
+    }
+
+	
+    
+    </script>
+	
+    <script src="https://code.jquery.com/jquery.js"></script>
+    <script src="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
+</div></body></html>
